@@ -2,6 +2,8 @@ import os
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, EmailStr
 from supabase import create_client, Client
 
 load_dotenv()
@@ -18,5 +20,51 @@ async def lifespan(app: FastAPI):
     print("Server running and connected to Supabase")
     yield
 
-
 app = FastAPI(lifespan=lifespan)
+
+class SignUp(BaseModel):
+    email: EmailStr
+    password: str
+
+class LogIn(BaseModel):
+    email: EmailStr
+    password: str
+
+@app.post("/auth/signup")
+def signup(body: SignUp):
+    try:
+        response = supabase.auth.sign_up({
+            "email": body.email,
+            "password": body.password
+        })
+
+        if not response.user:
+            return JSONResponse(status_code=400, content={"detail": "User object is missing in response"})
+
+        return JSONResponse(status_code=201, content={"user": response.user.model_dump()})
+    
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"detail": str(e)})
+
+@app.post("/auth/login")
+async def login(body: LogIn):
+    try:
+        response = supabase.auth.sign_in_with_password({
+            "email" : body.email,
+            "password" : body.password
+        })
+
+        if not response.user or not response.session:
+            return JSONResponse(status_code= 400, content= {"detail" : "Bad Request"})
+        
+        return JSONResponse(status_code= 200, content= {
+            "access_token" : response.session.access_token,
+            "refresh_token" : response.session.refresh_token, 
+            "token_type" : "bearer", 
+            "user" : {
+                "id" : response.user.id, 
+                "email" : response.user.email
+            }
+        }) 
+    except Exception:
+        return JSONResponse(status_code= 400, content= {"detail" : "Bad Request"})
