@@ -1,10 +1,13 @@
 import os
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from supabase import create_client, Client
+
+security = HTTPBearer(auto_error=False)
 
 load_dotenv()
 
@@ -68,3 +71,28 @@ async def login(body: LogIn):
         }) 
     except Exception:
         return JSONResponse(status_code= 400, content= {"detail" : "Bad Request"})
+
+@app.get("/public/info")
+async def public():
+    return JSONResponse(status_code= 200, content= {"message" : "Welcome Stranger! This info is public"})
+
+@app.get("/protected/profile")
+async def profile(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if not credentials or not credentials.credentials:
+        return JSONResponse(status_code=401, content={"error": "Access token required"})
+
+    token = credentials.credentials
+
+    try:
+        user_response = supabase.auth.get_user(token)
+
+        if not user_response or not user_response.user:
+            return JSONResponse(status_code=401, content={"error": "Access token required"})
+
+        return {
+            "message": "Welcome to your protected profile!",
+            "user_id": user_response.user.id,
+            "email": user_response.user.email
+        }
+    except Exception:
+        return JSONResponse(status_code=401, content={"error": "Access token required"})
