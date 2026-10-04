@@ -92,7 +92,8 @@ async def profile(credentials: HTTPAuthorizationCredentials = Depends(security))
         return {
             "message": "Welcome to your protected profile!",
             "user_id": user_response.user.id,
-            "email": user_response.user.email
+            "email": user_response.user.email,
+            "created_at": user_response.user.created_at
         }
     except Exception:
         return JSONResponse(status_code=401, content={"error": "Access token required"})
