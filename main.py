@@ -1,7 +1,7 @@
 import os
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
@@ -17,6 +17,22 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 PORT = int(os.getenv("PORT", 3000))
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+security = HTTPBearer()
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    
+    try:
+        response = supabase.auth.get_user(token)
+        
+        if not response.user:
+            return JSONResponse(status_code= 401, content={"message": "Invalid or expired authentication token"})
+            
+        return response.user
+
+    except Exception as e:
+        return JSONResponse(status_code= 401,content={"message": "Could not validate credentials"})
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -97,3 +113,18 @@ async def profile(credentials: HTTPAuthorizationCredentials = Depends(security))
         }
     except Exception:
         return JSONResponse(status_code=401, content={"error": "Access token required"})
+
+@app.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(current_user = Depends(verify_token)):
+
+    supabase.auth.sign_out() 
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@app.get("/protected/dashboard")
+def get_dashboard(current_user = Depends(verify_token)):
+
+    if isinstance(current_user, JSONResponse):
+        return current_user
+        
+    return {"message": f"Welcome to the dashboard, {current_user.email}"}
